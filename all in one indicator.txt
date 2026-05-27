@@ -485,33 +485,6 @@ if barstate.islast
 
     f_addRow(
          dashboard,
-         10,
-         "5m RSI",
-         str.tostring(rsi5m, "#.#"),
-         rsi5m > 50 ? color.green : color.red,
-         dashTextSize
-         )
-
-    f_addRow(
-         dashboard,
-         11,
-         "MACD Main",
-         str.tostring(macdMain, "#.##"),
-         color.black,
-         dashTextSize
-         )
-
-    f_addRow(
-         dashboard,
-         12,
-         "MACD Sig",
-         str.tostring(macdSig, "#.##"),
-         color.black,
-         dashTextSize
-         )
-
-    f_addRow(
-         dashboard,
          13,
          "Trend Str",
          trendStrength,
@@ -521,17 +494,8 @@ if barstate.islast
 
     f_addRow(
          dashboard,
-         14,
-         "Status",
-         statusText,
-         color.black,
-         dashTextSize
-         )
-
-    f_addRow(
-         dashboard,
          15,
-         "Sniper Mode",
+         "Author",
          "ONE_FAIZAN",
          color.blue,
          dashTextSize

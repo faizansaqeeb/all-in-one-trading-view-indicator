@@ -1,0 +1,538 @@
+//@version=5
+indicator(
+     "Sniper Dashboard + AlphaTrend + EMA + Smoothed Heikin Ashi",
+     shorttitle = "Sniper AT SHA",
+     overlay = true,
+     format = format.price,
+     precision = 2
+     )
+
+// =========================
+// ===== INPUTS ============
+// =========================
+dashTextSize = input.string(
+     "small",
+     "Dashboard Font Size",
+     options = ["tiny", "small", "normal", "large", "huge"]
+     )
+
+coeff = input.float(
+     1.0,
+     "AlphaTrend Multiplier",
+     step = 0.1
+     )
+
+AP = input.int(
+     14,
+     "AlphaTrend Period"
+     )
+
+showsignalsk = input.bool(
+     title = "Show Signals?",
+     defval = true
+     )
+
+novolumedata = input.bool(
+     title = "Change calculation (no volume data)?",
+     defval = false
+     )
+
+len = input.int(
+     10,
+     title = "SHA Length"
+     )
+
+len2 = input.int(
+     10,
+     title = "SHA Smooth Length"
+     )
+
+// =========================
+// ===== FUNCTION ==========
+// =========================
+f_addRow(_table, _row, _title, _value, _color, _size) =>
+
+    table.cell(
+         _table,
+         0,
+         _row,
+         _title,
+         text_color = color.black,
+         text_halign = text.align_left,
+         text_size = _size
+         )
+
+    table.cell(
+         _table,
+         1,
+         _row,
+         _value,
+         text_color = _color,
+         text_halign = text.align_right,
+         text_size = _size
+         )
+
+// =========================
+// ===== EMA SECTION =======
+// =========================
+ema9 = ta.ema(close, 9)
+ema21 = ta.ema(close, 21)
+ema200 = ta.ema(close, 200)
+
+plot(
+     ema9,
+     color = color.blue,
+     linewidth = 3,
+     title = "EMA 9"
+     )
+
+plot(
+     ema200,
+     color = color.yellow,
+     linewidth = 1,
+     title = "EMA 200"
+     )
+
+// =========================
+// ===== DASHBOARD DATA ====
+// =========================
+vwapV = ta.vwap(hlc3)
+
+rsiVal = ta.rsi(close, 14)
+
+rsi5m = request.security(
+     syminfo.tickerid,
+     "5",
+     ta.rsi(close, 14)
+     )
+
+macdFast = ta.ema(close, 12)
+macdSlow = ta.ema(close, 26)
+
+macdMain = macdFast - macdSlow
+macdSig = ta.ema(macdMain, 9)
+
+[_, _, adx] = ta.dmi(14, 14)
+
+atrVal = ta.atr(14)
+
+volAvg = ta.sma(volume, 20)
+
+// =========================
+// ===== SCORE LOGIC =======
+// =========================
+float bullScore = 0.0
+
+bullScore += close > vwapV ? 1 : 0
+bullScore += rsiVal > 50 ? 1 : 0
+bullScore += macdMain > macdSig ? 1 : 0
+bullScore += ema9 > ema21 ? 1 : 0
+bullScore += adx > 25 and close > ema9 ? 1 : 0
+bullScore += volume > volAvg and close > open ? 1 : 0
+bullScore += rsi5m > 50 ? 1 : 0
+
+float bullPct = (bullScore / 7) * 100
+
+float bearScore = 0.0
+
+bearScore += close < vwapV ? 1 : 0
+bearScore += rsiVal < 50 ? 1 : 0
+bearScore += macdMain < macdSig ? 1 : 0
+bearScore += ema9 < ema21 ? 1 : 0
+bearScore += adx > 25 and close < ema9 ? 1 : 0
+bearScore += volume > volAvg and close < open ? 1 : 0
+bearScore += rsi5m < 50 ? 1 : 0
+
+float bearPct = (bearScore / 7) * 100
+
+// =========================
+// ===== MARKET BIAS =======
+// =========================
+string biasText = "MILD BEAR"
+color biasColor = color.gray
+
+if (bullPct - bearPct) >= 40
+    biasText := "STRONG BULL"
+    biasColor := color.green
+else if (bearPct - bullPct) >= 40
+    biasText := "STRONG BEAR"
+    biasColor := color.red
+else if bullPct > bearPct
+    biasText := "MILD BULL"
+    biasColor := color.gray
+else
+    biasText := "MILD BEAR"
+    biasColor := color.gray
+
+// =========================
+// ===== STATUS ============
+// =========================
+string trendStrength = adx > 25 ? "STRONG" : "WEAK"
+
+string statusText = "WAIT"
+
+if ta.crossover(ema9, ema21) or ta.crossunder(ema9, ema21)
+    statusText := "NEW"
+
+// =========================
+// ===== ALPHATREND ========
+// =========================
+ATR = ta.sma(ta.tr, AP)
+
+src = input.source(close)
+
+upT = low - ATR * coeff
+downT = high + ATR * coeff
+
+AlphaTrend = 0.0
+
+AlphaTrend := (novolumedata ? ta.rsi(src, AP) >= 50 : ta.mfi(hlc3, AP) >= 50) ?
+     (upT < nz(AlphaTrend[1]) ? nz(AlphaTrend[1]) : upT) :
+     (downT > nz(AlphaTrend[1]) ? nz(AlphaTrend[1]) : downT)
+
+color1 = AlphaTrend > AlphaTrend[2] ? #00E60F :
+     AlphaTrend < AlphaTrend[2] ? #80000B :
+     AlphaTrend[1] > AlphaTrend[3] ? #00E60F : #80000B
+
+k1 = plot(
+     AlphaTrend,
+     color = color.new(#0022FC, 0),
+     linewidth = 3,
+     title = "AlphaTrend"
+     )
+
+k2 = plot(
+     AlphaTrend[2],
+     color = color.new(#FC0400, 0),
+     linewidth = 3,
+     title = "AlphaTrend Shifted"
+     )
+
+fill(
+     k1,
+     k2,
+     color = color1
+     )
+
+// =========================
+// ===== BUY / SELL ========
+// =========================
+buySignalk = ta.crossover(AlphaTrend, AlphaTrend[2])
+sellSignalk = ta.crossunder(AlphaTrend, AlphaTrend[2])
+
+K1 = ta.barssince(buySignalk)
+K2 = ta.barssince(sellSignalk)
+
+O1 = ta.barssince(buySignalk[1])
+O2 = ta.barssince(sellSignalk[1])
+
+plotshape(
+     buySignalk and showsignalsk and O1 > K2 ? AlphaTrend[2] * 0.9999 : na,
+     title = "BUY",
+     text = "BUY",
+     location = location.absolute,
+     style = shape.labelup,
+     size = size.tiny,
+     color = color.new(#0022FC, 0),
+     textcolor = color.white
+     )
+
+plotshape(
+     sellSignalk and showsignalsk and O2 > K1 ? AlphaTrend[2] * 1.0001 : na,
+     title = "SELL",
+     text = "SELL",
+     location = location.absolute,
+     style = shape.labeldown,
+     size = size.tiny,
+     color = color.new(color.maroon, 0),
+     textcolor = color.white
+     )
+
+// =========================
+// ===== ALERTS ============
+// =========================
+alertcondition(
+     buySignalk and O1 > K2,
+     title = "Potential BUY Alarm",
+     message = "BUY SIGNAL!"
+     )
+
+alertcondition(
+     sellSignalk and O2 > K1,
+     title = "Potential SELL Alarm",
+     message = "SELL SIGNAL!"
+     )
+
+alertcondition(
+     buySignalk[1] and O1[1] > K2,
+     title = "Confirmed BUY Alarm",
+     message = "BUY SIGNAL APPROVED!"
+     )
+
+alertcondition(
+     sellSignalk[1] and O2[1] > K1,
+     title = "Confirmed SELL Alarm",
+     message = "SELL SIGNAL APPROVED!"
+     )
+
+alertcondition(
+     ta.cross(close, AlphaTrend),
+     title = "Price Cross Alert",
+     message = "Price - AlphaTrend Crossing!"
+     )
+
+alertcondition(
+     ta.crossover(low, AlphaTrend),
+     title = "Candle CrossOver Alarm",
+     message = "LAST BAR is ABOVE ALPHATREND"
+     )
+
+alertcondition(
+     ta.crossunder(high, AlphaTrend),
+     title = "Candle CrossUnder Alarm",
+     message = "LAST BAR is BELOW ALPHATREND!"
+     )
+
+alertcondition(
+     ta.cross(close[1], AlphaTrend[1]),
+     title = "Price Cross Alert After Bar Close",
+     message = "Price - AlphaTrend Crossing!"
+     )
+
+alertcondition(
+     ta.crossover(low[1], AlphaTrend[1]),
+     title = "Candle CrossOver Alarm After Bar Close",
+     message = "LAST BAR is ABOVE ALPHATREND!"
+     )
+
+alertcondition(
+     ta.crossunder(high[1], AlphaTrend[1]),
+     title = "Candle CrossUnder Alarm After Bar Close",
+     message = "LAST BAR is BELOW ALPHATREND!"
+     )
+
+// =========================
+// == SMOOTHED HEIKEN ASHI =
+// =========================
+o_sha = ta.ema(open, len)
+c_sha = ta.ema(close, len)
+h_sha = ta.ema(high, len)
+l_sha = ta.ema(low, len)
+
+haclose = (o_sha + h_sha + l_sha + c_sha) / 4
+
+var float haopen = 0.0
+
+haopen := na(haopen[1]) ?
+     (o_sha + c_sha) / 2 :
+     (haopen[1] + haclose[1]) / 2
+
+hahigh = math.max(h_sha, math.max(haopen, haclose))
+halow = math.min(l_sha, math.min(haopen, haclose))
+
+o2 = ta.ema(haopen, len2)
+c2 = ta.ema(haclose, len2)
+h2 = ta.ema(hahigh, len2)
+l2 = ta.ema(halow, len2)
+
+col_sha = o2 > c2 ? color.red : color.lime
+
+plotcandle(
+     o2,
+     h2,
+     l2,
+     c2,
+     title = "Heikin Smoothed",
+     color = col_sha
+     )
+
+// =========================
+// ===== DASHBOARD =========
+// =========================
+var table dashboard = table.new(
+     position.middle_left,
+     2,
+     16,
+     bgcolor = color.new(#FFF9C4, 10),
+     border_width = 1,
+     border_color = color.new(color.gray, 60)
+     )
+
+if barstate.islast
+
+    table.cell(
+         dashboard,
+         0,
+         0,
+         "BULL SCORE",
+         bgcolor = color.green,
+         text_color = color.white,
+         text_size = dashTextSize
+         )
+
+    table.cell(
+         dashboard,
+         1,
+         0,
+         str.tostring(bullPct, "#") + "%",
+         bgcolor = color.green,
+         text_color = color.white,
+         text_size = dashTextSize
+         )
+
+    table.cell(
+         dashboard,
+         0,
+         1,
+         "BEAR SCORE",
+         bgcolor = color.red,
+         text_color = color.white,
+         text_size = dashTextSize
+         )
+
+    table.cell(
+         dashboard,
+         1,
+         1,
+         str.tostring(bearPct, "#") + "%",
+         bgcolor = color.red,
+         text_color = color.white,
+         text_size = dashTextSize
+         )
+
+    table.cell(
+         dashboard,
+         0,
+         2,
+         "MARKET BIAS",
+         bgcolor = color.black,
+         text_color = color.white,
+         text_size = dashTextSize
+         )
+
+    table.cell(
+         dashboard,
+         1,
+         2,
+         biasText,
+         bgcolor = biasColor,
+         text_color = color.white,
+         text_size = dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         3,
+         "Price/VWAP",
+         close > vwapV ? "ABOVE" : "BELOW",
+         close > vwapV ? color.green : color.red,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         4,
+         "RSI (14)",
+         str.tostring(rsiVal, "#.#"),
+         rsiVal > 50 ? color.green : color.red,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         5,
+         "MACD Trend",
+         macdMain > macdSig ? "BULL" : "BEAR",
+         macdMain > macdSig ? color.green : color.red,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         6,
+         "ADX Power",
+         str.tostring(adx, "#.#"),
+         adx > 25 ? color.green : color.orange,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         7,
+         "EMA Cross",
+         ema9 > ema21 ? "BULL" : "BEAR",
+         ema9 > ema21 ? color.green : color.red,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         8,
+         "ATR 14",
+         str.tostring(atrVal, "#.##"),
+         color.black,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         9,
+         "Vol Status",
+         volume > volAvg ? "HIGH" : "LOW",
+         volume > volAvg ? color.green : color.gray,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         10,
+         "5m RSI",
+         str.tostring(rsi5m, "#.#"),
+         rsi5m > 50 ? color.green : color.red,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         11,
+         "MACD Main",
+         str.tostring(macdMain, "#.##"),
+         color.black,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         12,
+         "MACD Sig",
+         str.tostring(macdSig, "#.##"),
+         color.black,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         13,
+         "Trend Str",
+         trendStrength,
+         adx > 25 ? color.green : color.red,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         14,
+         "Status",
+         statusText,
+         color.black,
+         dashTextSize
+         )
+
+    f_addRow(
+         dashboard,
+         15,
+         "Sniper Mode",
+         "ONE_FAIZAN",
+         color.blue,
+         dashTextSize
+         )

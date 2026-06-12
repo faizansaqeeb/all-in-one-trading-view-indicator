@@ -1,0 +1,15 @@
+//====================================================================
+// HIGH VOLUME DOT
+//====================================================================
+volumeThreshold = input(1000, title="High Volume Threshold")
+
+highVolumeCondition = volume >= volumeThreshold
+
+plotshape(
+     highVolumeCondition,
+     title     = "High Volume Dot",
+     style     = shape.circle,
+     location  = location.bottom,
+     color     = color.white,
+     size      = size.tiny
+ )
